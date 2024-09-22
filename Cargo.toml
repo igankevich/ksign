@@ -3,10 +3,18 @@ name = "ksign"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+homepage = "https://github.com/igankevich/ksign"
+repository = "https://github.com/igankevich/ksign"
+documentation = "https://docs.rs/ksign"
+readme = "README.md"
+description = "OpenWRT's `usign` utility rewritten in Rust. The crate provides both the executable and the library."
+keywords = ["openwrt", "usign", "sign", "verify", "fingerprint"]
+categories = ["cryptography"]
+include = ["**/*.rs", "Cargo.toml", "README.md", "LICENSE"]
 
 [dependencies]
 base64ct = { version = "1.6.0", features = ["std"] }
-clap = { version = "4.5.18", features = ["derive"] }
+clap = { version = "4.5.18", features = ["derive", "std", "help", "usage"], default-features = false }
 ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
 rand = "0.8.5"
 sha2 = "0.10.8"
@@ -22,4 +30,4 @@ expect_used = "deny"
 panic = "deny"
 
 [lints.rust]
-#missing_docs = "warn"
+missing_docs = "warn"

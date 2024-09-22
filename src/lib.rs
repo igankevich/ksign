@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 mod bytes;
 mod comment;
 mod constants;
@@ -12,7 +14,7 @@ pub use self::bytes::*;
 pub use self::comment::*;
 pub(crate) use self::constants::*;
 pub use self::error::*;
-pub(crate) use self::io::*;
+pub use self::io::*;
 pub use self::signature::*;
 pub use self::signing_key::*;
 pub use self::verifying_key::*;

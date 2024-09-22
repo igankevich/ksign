@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 use std::any::TypeId;
 use std::ffi::OsStr;
 use std::path::Path;
@@ -9,9 +11,10 @@ use ksign::Fingerprint;
 use ksign::Signature;
 use ksign::SigningKey;
 use ksign::VerifyingKey;
+use ksign::IO;
 
 #[derive(Parser)]
-#[command(about, long_about = None)]
+#[command(long_about = None, about = "OpenWRT's `usign` utility rewritten in Rust.", disable_help_flag = true)]
 struct Args {
     /// Verify signed file.
     #[arg(short = 'V', action)]
@@ -46,6 +49,9 @@ struct Args {
     /// Signature file.
     #[arg(short = 'x', value_name = "FILE")]
     signature_file: Option<PathBuf>,
+    /// Print help.
+    #[arg(short = 'h', action = clap::ArgAction::Help)]
+    help: bool,
 }
 
 fn main() -> ExitCode {
