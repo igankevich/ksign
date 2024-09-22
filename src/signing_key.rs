@@ -1,24 +1,22 @@
-use std::path::Path;
-
 use ed25519_dalek::Signer;
 use ed25519_dalek::SECRET_KEY_LENGTH;
 use rand::rngs::OsRng;
 use sha2::Digest;
 use sha2::Sha512;
 
-use crate::read_from_file;
-use crate::write_to_file;
 use crate::Checksum;
-use crate::Comment;
 use crate::Error;
 use crate::Fingerprint;
 use crate::Salt;
 use crate::Signature;
+use crate::UntrustedComment;
 use crate::VerifyingKey;
+use crate::IO;
 use crate::KDF_ALGO;
 use crate::PK_ALGO;
 use crate::SIGNING_KEY_BYTES_LEN;
 
+/// Signing (secret) key.
 pub struct SigningKey {
     pub(crate) signing_key: ed25519_dalek::SigningKey,
     pub(crate) salt: Salt,
@@ -28,6 +26,7 @@ pub struct SigningKey {
 }
 
 impl SigningKey {
+    /// Generate new signing key.
     #[allow(clippy::unwrap_used)]
     pub fn generate(comment: Option<String>) -> Self {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut OsRng);
@@ -45,6 +44,7 @@ impl SigningKey {
         }
     }
 
+    /// Sign the message using the signing key.
     pub fn sign(&self, message: &[u8]) -> Signature {
         let signature = self.signing_key.sign(message);
         Signature {
@@ -54,6 +54,7 @@ impl SigningKey {
         }
     }
 
+    /// Get the corresponding verifying key.
     pub fn to_verifying_key(&self) -> VerifyingKey {
         VerifyingKey {
             verifying_key: self.signing_key.verifying_key(),
@@ -61,8 +62,10 @@ impl SigningKey {
             comment: self.comment.clone(),
         }
     }
+}
 
-    pub fn to_bytes(&self) -> Vec<u8> {
+impl IO for SigningKey {
+    fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(SIGNING_KEY_BYTES_LEN);
         bytes.extend(PK_ALGO.bytes());
         bytes.extend(KDF_ALGO.bytes());
@@ -75,7 +78,7 @@ impl SigningKey {
         bytes
     }
 
-    pub fn from_bytes(bytes: &[u8], comment: Option<String>) -> Result<Self, Error> {
+    fn from_bytes(bytes: &[u8], comment: Option<String>) -> Result<Self, Error> {
         let algo =
             std::str::from_utf8(bytes.get(..2).ok_or(Error::Format)?).map_err(|_| Error::Format)?;
         if algo != PK_ALGO {
@@ -135,23 +138,10 @@ impl SigningKey {
         })
     }
 
-    pub fn comment(&self) -> Comment {
+    fn get_comment(&self) -> UntrustedComment {
         match self.comment.as_ref() {
-            Some(s) => Comment::String(s),
-            None => Comment::Fingerprint("private key", self.fingerprint),
+            Some(s) => UntrustedComment::String(s),
+            None => UntrustedComment::Fingerprint("private key", self.fingerprint),
         }
-    }
-
-    pub fn write_to_file(&self, path: &Path) -> Result<(), Error> {
-        Ok(write_to_file(
-            path,
-            self.comment(),
-            self.to_bytes().as_slice(),
-        )?)
-    }
-
-    pub fn read_from_file(path: &Path) -> Result<Self, Error> {
-        let (bytes, comment) = read_from_file(path, "signing key")?;
-        Self::from_bytes(&bytes, comment)
     }
 }

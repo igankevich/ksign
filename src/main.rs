@@ -1,17 +1,21 @@
+#![doc = include_str!("../README.md")]
+
 use std::any::TypeId;
 use std::ffi::OsStr;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use clap::CommandFactory;
 use clap::Parser;
 use ksign::Fingerprint;
 use ksign::Signature;
 use ksign::SigningKey;
 use ksign::VerifyingKey;
+use ksign::IO;
 
 #[derive(Parser)]
-#[command(about, long_about = None)]
+#[command(long_about = None, about = "OpenWRT's `usign` utility rewritten in Rust.", disable_help_flag = true)]
 struct Args {
     /// Verify signed file.
     #[arg(short = 'V', action)]
@@ -46,6 +50,9 @@ struct Args {
     /// Signature file.
     #[arg(short = 'x', value_name = "FILE")]
     signature_file: Option<PathBuf>,
+    /// Print help.
+    #[arg(short = 'h', action)]
+    help: bool,
 }
 
 fn main() -> ExitCode {
@@ -60,6 +67,10 @@ fn main() -> ExitCode {
 
 fn do_main() -> Result<ExitCode, Box<dyn std::error::Error>> {
     let args = Args::parse();
+    if args.help {
+        Args::command().print_help()?;
+        return Ok(ExitCode::SUCCESS);
+    }
     let num_commands = [args.verify, args.sign, args.fingerprint, args.generate]
         .into_iter()
         .filter(|x| *x)

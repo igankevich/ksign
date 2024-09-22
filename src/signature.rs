@@ -1,13 +1,11 @@
-use std::path::Path;
-
-use crate::read_from_file;
-use crate::write_to_file;
-use crate::Comment;
 use crate::Error;
 use crate::Fingerprint;
+use crate::UntrustedComment;
+use crate::IO;
 use crate::PK_ALGO;
 use crate::SIGNATURE_BYTES_LEN;
 
+/// Ed25519 signature.
 pub struct Signature {
     pub(crate) signature: ed25519_dalek::Signature,
     pub(crate) fingerprint: Fingerprint,
@@ -15,7 +13,31 @@ pub struct Signature {
 }
 
 impl Signature {
-    pub fn to_bytes(&self) -> Vec<u8> {
+    /// Get underlying signature.
+    pub fn signature(&self) -> &ed25519_dalek::Signature {
+        &self.signature
+    }
+
+    /// Get fingerprint.
+    pub fn fingerprint(&self) -> Fingerprint {
+        self.fingerprint
+    }
+
+    /// Get comment.
+    pub fn comment(&self) -> Option<&str> {
+        self.comment.as_deref()
+    }
+}
+
+impl IO for Signature {
+    fn get_comment(&self) -> UntrustedComment {
+        match self.comment.as_ref() {
+            Some(s) => UntrustedComment::String(s),
+            None => UntrustedComment::Fingerprint("signed by key", self.fingerprint),
+        }
+    }
+
+    fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(SIGNATURE_BYTES_LEN);
         bytes.extend(PK_ALGO.bytes());
         bytes.extend(self.fingerprint.0);
@@ -23,7 +45,7 @@ impl Signature {
         bytes
     }
 
-    pub fn from_bytes(bytes: &[u8], comment: Option<String>) -> Result<Self, Error> {
+    fn from_bytes(bytes: &[u8], comment: Option<String>) -> Result<Self, Error> {
         let algo =
             std::str::from_utf8(bytes.get(..2).ok_or(Error::Format)?).map_err(|_| Error::Format)?;
         if algo != PK_ALGO {
@@ -45,29 +67,5 @@ impl Signature {
             signature,
             comment,
         })
-    }
-
-    pub fn comment(&self) -> Comment {
-        match self.comment.as_ref() {
-            Some(s) => Comment::String(s),
-            None => Comment::Fingerprint("signed by key", self.fingerprint),
-        }
-    }
-
-    pub fn fingerprint(&self) -> Fingerprint {
-        self.fingerprint
-    }
-
-    pub fn write_to_file(&self, path: &Path) -> Result<(), Error> {
-        Ok(write_to_file(
-            path,
-            self.comment(),
-            self.to_bytes().as_slice(),
-        )?)
-    }
-
-    pub fn read_from_file(path: &Path) -> Result<Self, Error> {
-        let (bytes, comment) = read_from_file(path, "signature")?;
-        Self::from_bytes(&bytes, comment)
     }
 }
