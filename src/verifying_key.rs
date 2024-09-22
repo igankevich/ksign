@@ -5,11 +5,11 @@ use ed25519_dalek::Verifier;
 use crate::read_from_file;
 use crate::write_to_file;
 use crate::Comment;
+use crate::Error;
 use crate::Fingerprint;
 use crate::Signature;
 use crate::PK_ALGO;
 use crate::VERIFYING_KEY_BYTES_LEN;
-use crate::Error;
 
 pub struct VerifyingKey {
     pub(crate) verifying_key: ed25519_dalek::VerifyingKey,
@@ -33,8 +33,8 @@ impl VerifyingKey {
     }
 
     pub fn from_bytes(bytes: &[u8], comment: Option<String>) -> Result<Self, Error> {
-        let algo = std::str::from_utf8(bytes.get(..2).ok_or(Error::Format)?)
-            .map_err(|_| Error::Format)?;
+        let algo =
+            std::str::from_utf8(bytes.get(..2).ok_or(Error::Format)?).map_err(|_| Error::Format)?;
         if algo != PK_ALGO {
             return Err(Error::Algorithm);
         }
@@ -64,7 +64,11 @@ impl VerifyingKey {
     }
 
     pub fn write_to_file(&self, path: &Path) -> Result<(), Error> {
-        Ok(write_to_file(path, self.comment(), self.to_bytes().as_slice())?)
+        Ok(write_to_file(
+            path,
+            self.comment(),
+            self.to_bytes().as_slice(),
+        )?)
     }
 
     pub fn read_from_file(path: &Path) -> Result<Self, Error> {

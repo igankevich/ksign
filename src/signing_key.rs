@@ -6,11 +6,11 @@ use rand::rngs::OsRng;
 use sha2::Digest;
 use sha2::Sha512;
 
-use crate::Error;
 use crate::read_from_file;
 use crate::write_to_file;
 use crate::Checksum;
 use crate::Comment;
+use crate::Error;
 use crate::Fingerprint;
 use crate::Salt;
 use crate::Signature;
@@ -28,6 +28,7 @@ pub struct SigningKey {
 }
 
 impl SigningKey {
+    #[allow(clippy::unwrap_used)]
     pub fn generate(comment: Option<String>) -> Self {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut OsRng);
         let salt = Salt::generate();
@@ -40,7 +41,7 @@ impl SigningKey {
             salt,
             checksum,
             fingerprint,
-            comment: comment.map(|s| s.replace("\n", " ")),
+            comment: comment.map(|s| s.replace('\n', " ")),
         }
     }
 
@@ -75,8 +76,8 @@ impl SigningKey {
     }
 
     pub fn from_bytes(bytes: &[u8], comment: Option<String>) -> Result<Self, Error> {
-        let algo = std::str::from_utf8(bytes.get(..2).ok_or(Error::Format)?)
-            .map_err(|_| Error::Format)?;
+        let algo =
+            std::str::from_utf8(bytes.get(..2).ok_or(Error::Format)?).map_err(|_| Error::Format)?;
         if algo != PK_ALGO {
             return Err(Error::Algorithm);
         }
@@ -142,7 +143,11 @@ impl SigningKey {
     }
 
     pub fn write_to_file(&self, path: &Path) -> Result<(), Error> {
-        Ok(write_to_file(path, self.comment(), self.to_bytes().as_slice())?)
+        Ok(write_to_file(
+            path,
+            self.comment(),
+            self.to_bytes().as_slice(),
+        )?)
     }
 
     pub fn read_from_file(path: &Path) -> Result<Self, Error> {

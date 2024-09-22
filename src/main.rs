@@ -68,24 +68,18 @@ fn do_main() -> Result<ExitCode, Box<dyn std::error::Error>> {
         return Err("multiple commands specified".into());
     }
     if args.generate {
-        let signing_key_file = args
-            .secret_key_file
-            .ok_or_else(|| "no secret key file specified")?;
+        let signing_key_file = args.secret_key_file.ok_or("no secret key file specified")?;
         let verifying_key_file = args
             .public_key_file
-            .ok_or_else(|| "no verifying key file specified")?;
+            .ok_or("no verifying key file specified")?;
         let signing_key = SigningKey::generate(args.comment);
         let verifying_key = signing_key.to_verifying_key();
         signing_key.write_to_file(signing_key_file.as_path())?;
         verifying_key.write_to_file(verifying_key_file.as_path())?;
         Ok(ExitCode::SUCCESS)
     } else if args.sign {
-        let message_file = args
-            .message_file
-            .ok_or_else(|| "no message file specified")?;
-        let signing_key_file = args
-            .secret_key_file
-            .ok_or_else(|| "no secret key file specified")?;
+        let message_file = args.message_file.ok_or("no message file specified")?;
+        let signing_key_file = args.secret_key_file.ok_or("no secret key file specified")?;
         let signature_file = args
             .signature_file
             .unwrap_or_else(|| to_signature_file(message_file.as_path()));
@@ -96,9 +90,7 @@ fn do_main() -> Result<ExitCode, Box<dyn std::error::Error>> {
         signature.write_to_file(signature_file.as_path())?;
         Ok(ExitCode::SUCCESS)
     } else if args.verify {
-        let message_file = args
-            .message_file
-            .ok_or_else(|| "no message file specified")?;
+        let message_file = args.message_file.ok_or("no message file specified")?;
         let signature_file = args
             .signature_file
             .unwrap_or_else(|| to_signature_file(message_file.as_path()));
@@ -159,12 +151,9 @@ fn to_signature_file(message_file: &Path) -> PathBuf {
         }
         None => OsStr::new("sig").to_os_string(),
     };
-    let signature_file = {
-        let mut tmp = message_file.to_path_buf();
-        tmp.set_file_name(signature_file_name);
-        tmp
-    };
-    signature_file
+    let mut tmp = message_file.to_path_buf();
+    tmp.set_file_name(signature_file_name);
+    tmp
 }
 
 fn failed_to_read(path: &Path, e: std::io::Error) -> std::io::Error {
