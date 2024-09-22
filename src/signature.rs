@@ -24,8 +24,8 @@ impl Signature {
     }
 
     pub fn from_bytes(bytes: &[u8], comment: Option<String>) -> Result<Self, Error> {
-        let algo = std::str::from_utf8(bytes.get(..2).ok_or(Error::Format)?)
-            .map_err(|_| Error::Format)?;
+        let algo =
+            std::str::from_utf8(bytes.get(..2).ok_or(Error::Format)?).map_err(|_| Error::Format)?;
         if algo != PK_ALGO {
             return Err(Error::Algorithm);
         }
@@ -59,7 +59,11 @@ impl Signature {
     }
 
     pub fn write_to_file(&self, path: &Path) -> Result<(), Error> {
-        Ok(write_to_file(path, self.comment(), self.to_bytes().as_slice())?)
+        Ok(write_to_file(
+            path,
+            self.comment(),
+            self.to_bytes().as_slice(),
+        )?)
     }
 
     pub fn read_from_file(path: &Path) -> Result<Self, Error> {
