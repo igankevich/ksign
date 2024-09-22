@@ -1,4 +1,6 @@
 use std::ffi::OsStr;
+use std::fmt::Display;
+use std::fmt::Formatter;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -10,7 +12,6 @@ use std::process::ExitCode;
 use base64ct::Base64;
 use base64ct::Encoding;
 use clap::Parser;
-use clap::Subcommand;
 use ed25519_dalek::Signer;
 use ed25519_dalek::Verifier;
 use ed25519_dalek::SIGNATURE_LENGTH;
@@ -20,29 +21,41 @@ use sha2::Digest;
 use sha2::Sha512;
 
 #[derive(Parser)]
-#[command(version, about, long_about = None)]
+#[command(about, long_about = None)]
 struct Args {
-    #[command(subcommand)]
-    command: Command,
-}
-
-#[derive(Subcommand)]
-enum Command {
-    Generate {
-        verifying_key_file: PathBuf,
-        signing_key_file: PathBuf,
-    },
-    Sign {
-        message_file: PathBuf,
-        signing_key_file: PathBuf,
-    },
-    Verify {
-        message_file: PathBuf,
-        verifying_key_file: PathBuf,
-    },
-    Fingerprint {
-        file: PathBuf,
-    },
+    /// Verify signed file.
+    #[arg(short = 'V', action)]
+    verify: bool,
+    /// Sign speificed file.
+    #[arg(short = 'S', action)]
+    sign: bool,
+    /// Print key fingerprint for public key, secret key or signature.
+    #[arg(short = 'F', action)]
+    fingerprint: bool,
+    /// Generate a new key pair.
+    #[arg(short = 'G', action)]
+    generate: bool,
+    /// The comment to include in the file.
+    #[arg(short = 'c')]
+    comment: Option<String>,
+    /// Message file.
+    #[arg(short = 'm', value_name = "FILE")]
+    message_file: Option<PathBuf>,
+    /// Public key file.
+    #[arg(short = 'p', value_name = "FILE")]
+    public_key_file: Option<PathBuf>,
+    /// Public key directory.
+    #[arg(short = 'P', value_name = "DIRECTORY")]
+    public_key_directory: Option<PathBuf>,
+    /// Do not print signature verification status to stdout.
+    #[arg(short = 'q', action)]
+    quiet: bool,
+    /// Secret key file.
+    #[arg(short = 's', value_name = "FILE")]
+    secret_key_file: Option<PathBuf>,
+    /// Signature file.
+    #[arg(short = 'x', value_name = "FILE")]
+    signature_file: Option<PathBuf>,
 }
 
 fn main() -> ExitCode {
@@ -57,55 +70,99 @@ fn main() -> ExitCode {
 
 fn do_main() -> Result<ExitCode, Box<dyn std::error::Error>> {
     let args = Args::parse();
-    match args.command {
-        Command::Generate {
-            verifying_key_file,
-            signing_key_file,
-        } => {
-            let signing_key = SigningKey::generate();
-            let verifying_key = signing_key.to_verifying_key();
-            signing_key.write_to_file(signing_key_file.as_path())?;
-            verifying_key.write_to_file(verifying_key_file.as_path())?;
-        }
-        Command::Sign {
-            message_file,
-            signing_key_file,
-        } => {
-            let message = std::fs::read(message_file.as_path())
-                .map_err(|e| failed_to_read(message_file.as_path(), e))?;
-            let signing_key = SigningKey::read_from_file(signing_key_file.as_path())?;
-            let signature = signing_key.sign(&message);
-            let signature_file = to_signature_file(message_file.as_path());
-            signature.write_to_file(signature_file.as_path())?;
-        }
-        Command::Verify {
-            message_file,
-            verifying_key_file,
-        } => {
-            let message = std::fs::read(message_file.as_path())
-                .map_err(|e| failed_to_read(message_file.as_path(), e))?;
-            let signature_file = to_signature_file(message_file.as_path());
-            let signature = Signature::read_from_file(signature_file.as_path())?;
-            let verifying_key = VerifyingKey::read_from_file(verifying_key_file.as_path())?;
-            verifying_key.verify(&message, &signature)?;
-        }
-        Command::Fingerprint { file } => {
-            let bytes = read_bytes(file.as_path(), "signature/verifying key/signing key")?;
-            let fingerprint_offset = match bytes.len() {
-                SIGNATURE_BYTES_LEN => PK_ALGO_BYTES_LEN,
-                SIGNING_KEY_BYTES_LEN => 8 + Salt::LEN + Checksum::LEN,
-                VERIFYING_KEY_BYTES_LEN => PK_ALGO_BYTES_LEN,
-                _ => return Err("invalid length".into()),
-            };
-            let fingerprint: Fingerprint = bytes
-                .get(fingerprint_offset..(fingerprint_offset + Fingerprint::LEN))
-                .ok_or_else(|| "invalid length")?
-                .try_into()
-                .map_err(|_| "invalid length")?;
-            println!("{}", hex::encode(fingerprint.as_bytes()));
-        }
+    let num_commands = [args.verify, args.sign, args.fingerprint, args.generate]
+        .into_iter()
+        .filter(|x| *x)
+        .count();
+    if num_commands > 1 {
+        return Err("multiple commands specified".into());
     }
-    Ok(ExitCode::SUCCESS)
+    if args.generate {
+        let signing_key_file = args
+            .secret_key_file
+            .ok_or_else(|| "no secret key file specified")?;
+        let verifying_key_file = args
+            .public_key_file
+            .ok_or_else(|| "no verifying key file specified")?;
+        let signing_key = SigningKey::generate(args.comment);
+        let verifying_key = signing_key.to_verifying_key();
+        signing_key.write_to_file(signing_key_file.as_path())?;
+        verifying_key.write_to_file(verifying_key_file.as_path())?;
+        Ok(ExitCode::SUCCESS)
+    } else if args.sign {
+        let message_file = args
+            .message_file
+            .ok_or_else(|| "no message file specified")?;
+        let signing_key_file = args
+            .secret_key_file
+            .ok_or_else(|| "no secret key file specified")?;
+        let signature_file = args
+            .signature_file
+            .unwrap_or_else(|| to_signature_file(message_file.as_path()));
+        let message = std::fs::read(message_file.as_path())
+            .map_err(|e| failed_to_read(message_file.as_path(), e))?;
+        let signing_key = SigningKey::read_from_file(signing_key_file.as_path())?;
+        let signature = signing_key.sign(&message);
+        signature.write_to_file(signature_file.as_path())?;
+        Ok(ExitCode::SUCCESS)
+    } else if args.verify {
+        let message_file = args
+            .message_file
+            .ok_or_else(|| "no message file specified")?;
+        let signature_file = args
+            .signature_file
+            .unwrap_or_else(|| to_signature_file(message_file.as_path()));
+        let message = std::fs::read(message_file.as_path())
+            .map_err(|e| failed_to_read(message_file.as_path(), e))?;
+        let signature = Signature::read_from_file(signature_file.as_path())?;
+        let verifying_key_file = match (args.public_key_file, args.public_key_directory) {
+            (Some(_), Some(_)) => {
+                return Err("both public key file and public key directory specified".into())
+            }
+            (Some(file), None) => file,
+            (None, Some(dir)) => dir.join(hex::encode(signature.fingerprint.data)),
+            (None, None) => {
+                return Err("neither public key file nor public key directory specified".into())
+            }
+        };
+        let verifying_key = VerifyingKey::read_from_file(verifying_key_file.as_path())?;
+        verifying_key.verify(&message, &signature)?;
+        if !args.quiet {
+            println!("OK");
+        }
+        Ok(ExitCode::SUCCESS)
+    } else if args.fingerprint {
+        let files: Vec<_> = [
+            args.signature_file,
+            args.secret_key_file,
+            args.public_key_file,
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        if files.len() == 0 {
+            return Err("no file specified".into());
+        }
+        if files.len() > 1 {
+            return Err("multiple files specified".into());
+        }
+        let (bytes, _) = read_bytes(files[0].as_path(), "signature/verifying key/signing key")?;
+        let fingerprint_offset = match bytes.len() {
+            SIGNATURE_BYTES_LEN => PK_ALGO_BYTES_LEN,
+            SIGNING_KEY_BYTES_LEN => 8 + Salt::LEN + Checksum::LEN,
+            VERIFYING_KEY_BYTES_LEN => PK_ALGO_BYTES_LEN,
+            _ => return Err("invalid length".into()),
+        };
+        let fingerprint: Fingerprint = bytes
+            .get(fingerprint_offset..(fingerprint_offset + Fingerprint::LEN))
+            .ok_or_else(|| "invalid length")?
+            .try_into()
+            .map_err(|_| "invalid length")?;
+        println!("{}", hex::encode(fingerprint.as_bytes()));
+        Ok(ExitCode::SUCCESS)
+    } else {
+        Err("no command specified".into())
+    }
 }
 
 type Fingerprint = Bytes<8>;
@@ -117,10 +174,11 @@ struct SigningKey {
     salt: Salt,
     checksum: Checksum,
     fingerprint: Fingerprint,
+    comment: Option<String>,
 }
 
 impl SigningKey {
-    fn generate() -> Self {
+    fn generate(comment: Option<String>) -> Self {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut OsRng);
         let salt = Salt::generate();
         let fingerprint = Fingerprint::generate();
@@ -132,6 +190,7 @@ impl SigningKey {
             salt,
             checksum,
             fingerprint,
+            comment: comment.map(|s| s.replace("\n", " ")),
         }
     }
 
@@ -140,6 +199,7 @@ impl SigningKey {
         Signature {
             signature,
             fingerprint: self.fingerprint,
+            comment: self.comment.clone(),
         }
     }
 
@@ -147,6 +207,7 @@ impl SigningKey {
         VerifyingKey {
             verifying_key: self.signing_key.verifying_key(),
             fingerprint: self.fingerprint,
+            comment: self.comment.clone(),
         }
     }
 
@@ -163,7 +224,7 @@ impl SigningKey {
         bytes
     }
 
-    fn from_bytes(bytes: &[u8]) -> Result<Self, std::io::Error> {
+    fn from_bytes(bytes: &[u8], comment: Option<String>) -> Result<Self, std::io::Error> {
         let algo = std::str::from_utf8(bytes.get(..2).ok_or_else(invalid_key)?)
             .map_err(|_| invalid_key())?;
         if algo != PK_ALGO {
@@ -219,7 +280,15 @@ impl SigningKey {
             salt,
             fingerprint,
             checksum,
+            comment,
         })
+    }
+
+    fn get_comment(&self) -> Comment {
+        match self.comment.as_ref() {
+            Some(s) => Comment::String(s),
+            None => Comment::Fingerprint("private key", self.fingerprint),
+        }
     }
 
     fn write_to_file(&self, path: &Path) -> Result<(), std::io::Error> {
@@ -229,19 +298,21 @@ impl SigningKey {
 
     fn do_write_to_file(&self, path: &Path) -> Result<(), std::io::Error> {
         let mut file = File::create(path)?;
-        write_comment(&mut file, "private key", self.fingerprint)?;
+        write_comment(&mut file, self.get_comment())?;
         write_bytes(&mut file, self.to_bytes().as_slice())?;
         Ok(())
     }
 
     fn read_from_file(path: &Path) -> Result<Self, std::io::Error> {
-        Self::from_bytes(&read_bytes(path, "signing key")?)
+        let (bytes, comment) = read_bytes(path, "signing key")?;
+        Self::from_bytes(&bytes, comment)
     }
 }
 
 struct VerifyingKey {
     verifying_key: ed25519_dalek::VerifyingKey,
     fingerprint: Fingerprint,
+    comment: Option<String>,
 }
 
 impl VerifyingKey {
@@ -259,7 +330,7 @@ impl VerifyingKey {
         bytes
     }
 
-    fn from_bytes(bytes: &[u8]) -> Result<Self, std::io::Error> {
+    fn from_bytes(bytes: &[u8], comment: Option<String>) -> Result<Self, std::io::Error> {
         let algo = std::str::from_utf8(bytes.get(..2).ok_or_else(invalid_key)?)
             .map_err(|_| invalid_key())?;
         if algo != PK_ALGO {
@@ -279,7 +350,15 @@ impl VerifyingKey {
         Ok(Self {
             verifying_key,
             fingerprint,
+            comment,
         })
+    }
+
+    fn get_comment(&self) -> Comment {
+        match self.comment.as_ref() {
+            Some(s) => Comment::String(s),
+            None => Comment::Fingerprint("public key", self.fingerprint),
+        }
     }
 
     fn write_to_file(&self, path: &Path) -> Result<(), std::io::Error> {
@@ -289,19 +368,21 @@ impl VerifyingKey {
 
     fn do_write_to_file(&self, path: &Path) -> Result<(), std::io::Error> {
         let mut file = File::create(path)?;
-        write_comment(&mut file, "public key", self.fingerprint)?;
+        write_comment(&mut file, self.get_comment())?;
         write_bytes(&mut file, self.to_bytes().as_slice())?;
         Ok(())
     }
 
     fn read_from_file(path: &Path) -> Result<Self, std::io::Error> {
-        Self::from_bytes(&read_bytes(path, "verifying key")?)
+        let (bytes, comment) = read_bytes(path, "verifying key")?;
+        Self::from_bytes(&bytes, comment)
     }
 }
 
 struct Signature {
     signature: ed25519_dalek::Signature,
     fingerprint: Fingerprint,
+    comment: Option<String>,
 }
 
 impl Signature {
@@ -313,7 +394,7 @@ impl Signature {
         bytes
     }
 
-    fn from_bytes(bytes: &[u8]) -> Result<Self, std::io::Error> {
+    fn from_bytes(bytes: &[u8], comment: Option<String>) -> Result<Self, std::io::Error> {
         let algo = std::str::from_utf8(bytes.get(..2).ok_or_else(invalid_signature)?)
             .map_err(|_| invalid_signature())?;
         if algo != PK_ALGO {
@@ -333,7 +414,15 @@ impl Signature {
         Ok(Self {
             fingerprint,
             signature,
+            comment,
         })
+    }
+
+    fn get_comment(&self) -> Comment {
+        match self.comment.as_ref() {
+            Some(s) => Comment::String(s),
+            None => Comment::Fingerprint("signed by key", self.fingerprint),
+        }
     }
 
     fn write_to_file(&self, path: &Path) -> Result<(), std::io::Error> {
@@ -343,13 +432,14 @@ impl Signature {
 
     fn do_write_to_file(&self, path: &Path) -> Result<(), std::io::Error> {
         let mut file = File::create(path)?;
-        write_comment(&mut file, "signed by key", self.fingerprint)?;
+        write_comment(&mut file, self.get_comment())?;
         write_bytes(&mut file, self.to_bytes().as_slice())?;
         Ok(())
     }
 
     fn read_from_file(path: &Path) -> Result<Self, std::io::Error> {
-        Self::from_bytes(&read_bytes(path, "signature")?)
+        let (bytes, comment) = read_bytes(path, "signature")?;
+        Self::from_bytes(&bytes, comment)
     }
 }
 
@@ -386,35 +476,46 @@ impl<const N: usize> TryFrom<&[u8]> for Bytes<N> {
     }
 }
 
-fn write_comment(
-    writer: &mut impl Write,
-    comment: &str,
-    fingerprint: Fingerprint,
-) -> Result<(), std::io::Error> {
-    writeln!(
-        writer,
-        "{} {} {}",
-        COMMENT_PREFIX,
-        comment,
-        hex::encode(fingerprint.as_bytes())
-    )
+enum Comment<'a> {
+    String(&'a str),
+    Fingerprint(&'a str, Fingerprint),
+}
+
+impl<'a> Display for Comment<'a> {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::String(s) => f.write_str(s),
+            Self::Fingerprint(s, fp) => write!(f, "{} {}", s, hex::encode(fp.as_bytes())),
+        }
+    }
+}
+
+fn write_comment(writer: &mut impl Write, comment: Comment<'_>) -> Result<(), std::io::Error> {
+    writeln!(writer, "{} {}", COMMENT_PREFIX, comment)
 }
 
 fn write_bytes(writer: &mut impl Write, bytes: &[u8]) -> Result<(), std::io::Error> {
     writeln!(writer, "{}", Base64::encode_string(bytes))
 }
 
-fn read_bytes(path: &Path, name: &str) -> Result<Vec<u8>, std::io::Error> {
+fn read_bytes(path: &Path, name: &str) -> Result<(Vec<u8>, Option<String>), std::io::Error> {
+    do_read_bytes(path, name).map_err(|e| failed_to_read(path, e))
+}
+
+fn do_read_bytes(path: &Path, name: &str) -> Result<(Vec<u8>, Option<String>), std::io::Error> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
+    let mut comment: Option<String> = None;
     for line in reader.lines() {
         let line = line?;
         let line = line.trim();
         if line.starts_with(COMMENT_PREFIX) || line.is_empty() {
+            comment = Some(line[COMMENT_PREFIX.len()..].into());
             continue;
         }
-        return Base64::decode_vec(line)
-            .map_err(|_| std::io::Error::other(format!("invalid {}", name)));
+        let bytes = Base64::decode_vec(line)
+            .map_err(|_| std::io::Error::other(format!("invalid {}", name)))?;
+        return Ok((bytes, comment));
     }
     Err(std::io::Error::other(format!("{} not found", name)))
 }
