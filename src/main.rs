@@ -6,6 +6,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use clap::CommandFactory;
 use clap::Parser;
 use ksign::Fingerprint;
 use ksign::Signature;
@@ -50,7 +51,7 @@ struct Args {
     #[arg(short = 'x', value_name = "FILE")]
     signature_file: Option<PathBuf>,
     /// Print help.
-    #[arg(short = 'h', action = clap::ArgAction::Help)]
+    #[arg(short = 'h', action)]
     help: bool,
 }
 
@@ -66,6 +67,10 @@ fn main() -> ExitCode {
 
 fn do_main() -> Result<ExitCode, Box<dyn std::error::Error>> {
     let args = Args::parse();
+    if args.help {
+        Args::command().print_help()?;
+        return Ok(ExitCode::SUCCESS);
+    }
     let num_commands = [args.verify, args.sign, args.fingerprint, args.generate]
         .into_iter()
         .filter(|x| *x)
