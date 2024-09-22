@@ -1,3 +1,4 @@
+use std::any::TypeId;
 use std::ffi::OsStr;
 use std::path::Path;
 use std::path::PathBuf;
@@ -117,25 +118,31 @@ fn do_main() -> Result<ExitCode, Box<dyn std::error::Error>> {
         let verifying_key = VerifyingKey::read_from_file(verifying_key_file.as_path())?;
         verifying_key.verify(&message, &signature)?;
         if !args.quiet {
-            println!("OK");
+            eprintln!("OK");
         }
         Ok(ExitCode::SUCCESS)
     } else if args.fingerprint {
-        let files: Vec<_> = [
-            args.signature_file,
-            args.secret_key_file,
-            args.public_key_file,
+        let num_files = [
+            args.signature_file.is_some(),
+            args.secret_key_file.is_some(),
+            args.public_key_file.is_some(),
         ]
         .into_iter()
-        .flatten()
-        .collect();
-        if files.len() == 0 {
-            return Err("no file specified".into());
-        }
-        if files.len() > 1 {
+        .filter(|x| *x)
+        .count();
+        if num_files > 1 {
             return Err("multiple files specified".into());
         }
-        let fingerprint = Fingerprint::read_from_file(files[0].as_path())?;
+        let (file, type_id) = if let Some(file) = args.signature_file {
+            (file, TypeId::of::<Signature>())
+        } else if let Some(file) = args.secret_key_file {
+            (file, TypeId::of::<SigningKey>())
+        } else if let Some(file) = args.public_key_file {
+            (file, TypeId::of::<VerifyingKey>())
+        } else {
+            return Err("no file specified".into());
+        };
+        let fingerprint = Fingerprint::read_from_file(file.as_path(), type_id)?;
         println!("{}", fingerprint);
         Ok(ExitCode::SUCCESS)
     } else {
