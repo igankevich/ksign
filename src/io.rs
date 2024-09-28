@@ -23,20 +23,20 @@ pub trait IO {
     fn get_comment(&self) -> UntrustedComment;
 
     /// Write byte representation to file.
-    fn write_to_file(&self, path: &Path) -> Result<(), Error> {
+    fn write_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
         Ok(write_to_file(
-            path,
+            path.as_ref(),
             self.get_comment(),
             self.to_bytes().as_slice(),
         )?)
     }
 
     /// Read byte representation from file.
-    fn read_from_file(path: &Path) -> Result<Self, Error>
+    fn read_from_file<P: AsRef<Path>>(path: P) -> Result<Self, Error>
     where
         Self: Sized,
     {
-        let (bytes, comment) = read_from_file(path)?;
+        let (bytes, comment) = read_from_file(path.as_ref())?;
         Self::from_bytes(&bytes, comment)
     }
 }

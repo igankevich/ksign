@@ -22,8 +22,8 @@ impl Fingerprint {
     /// Read fingerprint from the specified file assuming the contents of the file
     /// correspond to the supplied type id. Type id can be that of [Signature], [SigningKey]
     /// or [VerifyingKey].
-    pub fn read_from_file(path: &Path, type_id: TypeId) -> Result<Fingerprint, Error> {
-        let (bytes, _) = read_from_file(path)?;
+    pub fn read_from_file<P: AsRef<Path>>(path: P, type_id: TypeId) -> Result<Fingerprint, Error> {
+        let (bytes, _) = read_from_file(path.as_ref())?;
         let fingerprint_offset = match bytes.len() {
             SIGNATURE_BYTES_LEN if type_id == TypeId::of::<Signature>() => PK_ALGO_BYTES_LEN,
             SIGNING_KEY_BYTES_LEN if type_id == TypeId::of::<SigningKey>() => {
