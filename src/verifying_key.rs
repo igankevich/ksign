@@ -22,6 +22,11 @@ impl VerifyingKey {
             .verify(message, &signature.signature)
             .map_err(|_| Error::Verification)
     }
+
+    /// Get fingerprint.
+    pub fn fingerprint(&self) -> &Fingerprint {
+        &self.fingerprint
+    }
 }
 
 impl IO for VerifyingKey {

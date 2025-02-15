@@ -62,6 +62,11 @@ impl SigningKey {
             comment: self.comment.clone(),
         }
     }
+
+    /// Get fingerprint.
+    pub fn fingerprint(&self) -> &Fingerprint {
+        &self.fingerprint
+    }
 }
 
 impl IO for SigningKey {
