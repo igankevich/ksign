@@ -18,3 +18,6 @@ pub use self::io::*;
 pub use self::signature::*;
 pub use self::signing_key::*;
 pub use self::verifying_key::*;
+
+// Re-exports.
+pub use ed25519_dalek as ed25519;
