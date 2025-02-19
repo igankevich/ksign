@@ -47,7 +47,7 @@ impl Fingerprint {
 
 impl Display for Fingerprint {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        for byte in self.0.iter() {
+        for byte in self.iter() {
             write!(f, "{:02x}", byte)?;
         }
         Ok(())

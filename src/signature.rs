@@ -39,9 +39,9 @@ impl IO for Signature {
 
     fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(SIGNATURE_BYTES_LEN);
-        bytes.extend(PK_ALGO.bytes());
-        bytes.extend(self.fingerprint.0);
-        bytes.extend(self.signature.to_bytes());
+        bytes.extend_from_slice(PK_ALGO.as_bytes());
+        bytes.extend_from_slice(&self.fingerprint[..]);
+        bytes.extend_from_slice(&self.signature.to_bytes()[..]);
         bytes
     }
 

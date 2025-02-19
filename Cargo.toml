@@ -1,6 +1,6 @@
 [package]
 name = "ksign"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 license = "MIT"
 homepage = "https://github.com/igankevich/ksign"
@@ -14,14 +14,14 @@ include = ["**/*.rs", "Cargo.toml", "README.md", "LICENSE"]
 
 [dependencies]
 base64ct = { version = "1.6.0", features = ["std"] }
-clap = { version = "4.5.18", features = ["derive", "std", "help", "usage"], default-features = false }
+clap = { version = "4.5.29", features = ["derive", "std", "help", "usage"], default-features = false }
 ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
 rand = "0.8.5"
 sha2 = "0.10.8"
-thiserror = "1.0.63"
+thiserror = "2.0.11"
 
 [dev-dependencies]
-tempfile = "3.12.0"
+tempfile = "3.17.1"
 test_bin = "0.4.0"
 
 [lints.clippy]

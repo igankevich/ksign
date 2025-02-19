@@ -26,15 +26,19 @@ pub struct SigningKey {
 }
 
 impl SigningKey {
-    /// Generate new signing key.
-    #[allow(clippy::unwrap_used)]
-    pub fn generate(comment: Option<String>) -> Self {
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut OsRng);
-        let salt = Salt::generate();
-        let fingerprint = Fingerprint::generate();
+    /// Create new signing key from the provided items.
+    #[allow(clippy::expect_used)]
+    pub fn new(
+        signing_key: ed25519_dalek::SigningKey,
+        salt: Salt,
+        fingerprint: Fingerprint,
+        comment: Option<String>,
+    ) -> Self {
         let mut hasher = Sha512::new();
         hasher.update(signing_key.as_bytes());
-        let checksum: Checksum = hasher.finalize()[..Checksum::LEN].try_into().unwrap();
+        let checksum: Checksum = hasher.finalize()[..Checksum::LEN]
+            .try_into()
+            .expect("Same length");
         Self {
             signing_key,
             salt,
@@ -42,6 +46,14 @@ impl SigningKey {
             fingerprint,
             comment: comment.map(|s| s.replace('\n', " ")),
         }
+    }
+
+    /// Generate new signing key.
+    pub fn generate(comment: Option<String>) -> Self {
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut OsRng);
+        let salt = Salt::generate();
+        let fingerprint = Fingerprint::generate();
+        Self::new(signing_key, salt, fingerprint, comment)
     }
 
     /// Sign the message using the signing key.
@@ -72,14 +84,14 @@ impl SigningKey {
 impl IO for SigningKey {
     fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(SIGNING_KEY_BYTES_LEN);
-        bytes.extend(PK_ALGO.bytes());
-        bytes.extend(KDF_ALGO.bytes());
-        bytes.extend([0, 0, 0, 0]);
-        bytes.extend(self.salt.0);
-        bytes.extend(self.checksum.0);
-        bytes.extend(self.fingerprint.0);
-        bytes.extend(self.signing_key.as_bytes());
-        bytes.extend(self.signing_key.verifying_key().as_bytes());
+        bytes.extend_from_slice(PK_ALGO.as_bytes());
+        bytes.extend_from_slice(KDF_ALGO.as_bytes());
+        bytes.extend_from_slice(&[0, 0, 0, 0]);
+        bytes.extend_from_slice(&self.salt[..]);
+        bytes.extend_from_slice(&self.checksum[..]);
+        bytes.extend_from_slice(&self.fingerprint[..]);
+        bytes.extend_from_slice(self.signing_key.as_bytes());
+        bytes.extend_from_slice(self.signing_key.verifying_key().as_bytes());
         bytes
     }
 
